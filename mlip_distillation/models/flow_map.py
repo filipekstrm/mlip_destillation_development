@@ -17,7 +17,7 @@ class FlowMap(nn.Module):
         dpos, dlattice_unscaled = self.v_model(data, s, t)
         V = torch.linalg.det(data.cell).view(-1, 1, 1)
         dlattice = V * torch.matmul(
-            dlattice_unscaled, torch.inverse(data.cell).tranpose(-1, -2)
+            dlattice_unscaled, torch.inverse(data.cell).transpose(-1, -2)
         )
         return dpos, dlattice
 

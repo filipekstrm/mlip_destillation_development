@@ -3,7 +3,8 @@ import math
 import torch
 import torch.nn as nn
 from fairchem.core.common.registry import registry
-from mlip_destillation.models.utils import NoiseLevelEncoding
+
+from mlip_distillation.models.utils import NoiseLevelEncoding
 
 from .edge_rot_mat import init_edge_rot_mat
 from .envelope import PolynomialEnvelope

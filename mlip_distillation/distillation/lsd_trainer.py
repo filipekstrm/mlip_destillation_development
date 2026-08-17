@@ -12,6 +12,7 @@ class LSDTrainer(FlowMapTrainer):
         losses = []
         losses_b = []
         losses_lsd = []
+        print("Starting training flow map with LSD")
         for epoch in range(num_epochs):
             for x0, x1 in self.train_loader:
                 x0 = x0.to(device)
