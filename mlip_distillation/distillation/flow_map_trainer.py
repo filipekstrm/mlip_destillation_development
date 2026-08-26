@@ -6,8 +6,9 @@ import torch.nn.functional as F
 
 
 class FlowMapTrainer(ABC):
-    def __init__(self, dataloader):
+    def __init__(self, dataloader, sampler=None):
         self.train_loader = dataloader
+        self.sampler = sampler
 
     def build_stochastic_interpolant(self, x0, x1, t):
         It = x0.clone()

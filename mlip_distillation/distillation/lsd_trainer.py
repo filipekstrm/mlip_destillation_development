@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import torch
@@ -6,6 +7,7 @@ from fairchem.core.datasets.atomic_data import atomicdata_list_to_batch
 from torch.amp import autocast
 
 from mlip_distillation.distillation.flow_map_trainer import FlowMapTrainer
+from mlip_distillation.distributed_utils import is_main_process
 
 
 class LSDTrainer(FlowMapTrainer):
@@ -15,6 +17,8 @@ class LSDTrainer(FlowMapTrainer):
         losses_lsd = []
         print("Starting training flow map with LSD")
         for epoch in range(num_epochs):
+            if self.sampler is not None:
+                self.sampler.set_epoch(epoch)
             for x0, x1 in self.train_loader:
                 x0 = x0.to(device)
                 x1 = x1.to(device)
@@ -70,4 +74,18 @@ class LSDTrainer(FlowMapTrainer):
                 f"L_B loss: {np.mean(losses_b)}\n",
                 f"L_LSD loss: {np.mean(losses_lsd)}",
             )
+
+            if is_main_process():
+                self.save_checkpoint(flow_map, epoch)
         return flow_map
+
+    def save_checkpoint(self, model, epoch):
+        # unwrap DDP if present, otherwise save as-is
+        state_dict = (
+            model.module.state_dict()
+            if hasattr(model, "module")
+            else model.state_dict()
+        )
+        torch.save(
+            state_dict, os.path.join("checkpoints", f"checkpoint_epoch={epoch}.pt")
+        )
