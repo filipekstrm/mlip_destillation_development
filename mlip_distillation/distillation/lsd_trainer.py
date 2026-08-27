@@ -31,8 +31,10 @@ class LSDTrainer(FlowMapTrainer):
                 x1_i = atomicdata_list_to_batch(x1[i_idx])
                 x0_i = atomicdata_list_to_batch(x0[i_idx])
                 t_i = torch.rand((M_d,), device=device)
-                It_i = self.build_stochastic_interpolant(x0_i, x1_i, t_i)
-                It_i_dot = self.stochastic_interpolant_derivative(x0_i, x1_i)
+                It_i, cell_t_i_aux = self.build_stochastic_interpolant(x0_i, x1_i, t_i)
+                It_i_dot = self.stochastic_interpolant_derivative(
+                    x0_i, x1_i, cell_t_i_aux
+                )
                 with autocast(device_type="cuda", dtype=torch.bfloat16):
                     w_ti = flow_map.compute_weight(t_i, t_i)
                     pos_i_pred, cell_i_pred = flow_map.v(It_i, t_i, t_i)
@@ -51,7 +53,7 @@ class LSDTrainer(FlowMapTrainer):
                     x1_j = atomicdata_list_to_batch(x1[j_idx])
                     x0_j = atomicdata_list_to_batch(x0[j_idx])
                     s_j, t_j = self.sample_s_t(M_o, device)
-                    Is_j = self.build_stochastic_interpolant(x0_j, x1_j, s_j)
+                    Is_j, _ = self.build_stochastic_interpolant(x0_j, x1_j, s_j)
                     Xst, dXst_dt_pos, dXst_dt_cell = flow_map.partial_t(Is_j, s_j, t_j)
 
                     bt_j_pos, bt_j_cell = flow_map.v(Xst, t_j, t_j)

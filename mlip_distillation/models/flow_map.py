@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from mlip_distillation.common.lattice_decomposition import safe_det, safe_inverse
 from mlip_distillation.models import utils
 
 
@@ -15,9 +16,9 @@ class FlowMap(nn.Module):
 
     def v(self, data, s, t):
         dpos, dlattice_unscaled = self.v_model(data, s, t)
-        V = torch.linalg.det(data.cell).view(-1, 1, 1)
+        V = safe_det(data.cell).view(-1, 1, 1)
         dlattice = V * torch.matmul(
-            dlattice_unscaled, torch.inverse(data.cell).transpose(-1, -2)
+            dlattice_unscaled, safe_inverse(data.cell).transpose(-1, -2)
         )
         return dpos, dlattice
 
