@@ -15,7 +15,8 @@ class LSDTrainer(FlowMapTrainer):
         losses = []
         losses_b = []
         losses_lsd = []
-        print("Starting training flow map with LSD")
+        if is_main_process():
+            print("Starting training flow map with LSD")
         for epoch in range(num_epochs):
             if self.sampler is not None:
                 self.sampler.set_epoch(epoch)
@@ -71,13 +72,12 @@ class LSDTrainer(FlowMapTrainer):
                 losses_lsd.append(L_LSD.item())
                 losses_b.append(L_b.item())
                 losses.append(L_SD.item())
-            print(
-                f"Epoch {epoch + 1} loss:\n",
-                f"L_B loss: {np.mean(losses_b)}\n",
-                f"L_LSD loss: {np.mean(losses_lsd)}",
-            )
-
             if is_main_process():
+                print(
+                    f"Epoch {epoch + 1} loss:\n",
+                    f"L_B loss: {np.mean(losses_b)}\n",
+                    f"L_LSD loss: {np.mean(losses_lsd)}",
+                )
                 self.save_checkpoint(flow_map, epoch)
         return flow_map
 
