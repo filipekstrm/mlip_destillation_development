@@ -3,3 +3,6 @@ data
 *.egg-info
 *.ipynb
 __pycache__
+
+job
+slurm_logs/

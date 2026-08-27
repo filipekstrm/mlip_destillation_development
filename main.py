@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch.nn.parallel import DistributedDataParallel as DDP
+from mlip_distillation.distributed_utils import DDPWrapper as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
 from mlip_distillation.common.args_and_config import get_config

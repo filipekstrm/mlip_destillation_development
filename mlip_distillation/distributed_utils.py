@@ -3,6 +3,8 @@ import os
 import torch
 import torch.distributed as dist
 
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 
 def is_distributed_launch() -> bool:
     """True only when launched via torchrun with more than 1 process."""
@@ -41,3 +43,11 @@ def cleanup_ddp():
 
 def is_main_process() -> bool:
     return not dist.is_initialized() or dist.get_rank() == 0
+
+
+class DDPWrapper(DDP):
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
