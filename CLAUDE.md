@@ -28,7 +28,7 @@ The project is a deep learning project and hence uses PyTorch. The mamba environ
 
 ## Conventions and gotchas
 - The forward/loss pass runs under bf16 autocast. Linear algebra (eigh, solve, det, inverse) must go through the `safe_*` helpers in `lattice_decomposition.py`, which upcast to fp32.
-- In `FlowMap.v`, the model's raw cell output is rescaled by `det(cell) * dcell_unscaled @ cell^-T`. This is the current choice, not a settled one: it is open for discussion, so don't change it silently.
+- In `FlowMap.v`, the model's raw cell output (a stress-like tensor from the stress head) is symmetrized and mapped to `dcell = cell @ sigma`, i.e. a pure strain with no rotation (row convention). The interpolant's cell velocity is only exactly representable if `L0^-1 L1` is symmetric, i.e. x1 has no rigid rotation relative to x0. This is the current choice, not a settled one: it is open for discussion, so don't change it silently.
 - Under DDP, print and save only when `is_main_process()` is true. Unwrap `.module` before calling `state_dict()`.
 - Checkpoints are written to `checkpoints/checkpoint_epoch={epoch}.pt`. The `checkpoints/` directory must already exist.
 
