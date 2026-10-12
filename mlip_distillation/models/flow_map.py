@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-from mlip_distillation.common.lattice_decomposition import safe_det, safe_inverse
 from mlip_distillation.models import utils
 
 
@@ -15,11 +14,11 @@ class FlowMap(nn.Module):
             self.weights_model = None
 
     def v(self, data, s, t):
-        dpos, dlattice_unscaled = self.v_model(data, s, t)
-        V = safe_det(data.cell).view(-1, 1, 1)
-        dlattice = V * torch.matmul(
-            dlattice_unscaled, safe_inverse(data.cell).transpose(-1, -2)
-        )
+        dpos, strain_rate = self.v_model(data, s, t)
+        # Cell moves by a pure (symmetric) strain, no rotation: dL = L @ sigma
+        # (row convention, rows of cell are lattice vectors)
+        strain_rate = 0.5 * (strain_rate + strain_rate.transpose(-1, -2))
+        dlattice = torch.matmul(data.cell, strain_rate)
         return dpos, dlattice
 
     def compute_weight(self, s, t):
