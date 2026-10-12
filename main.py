@@ -30,7 +30,7 @@ def main(config):
 
     config["device"] = device
     # Dataloader
-    dataset = AsePairDBDataset({"src": "data/omat_init_and_final_relaxed"})
+    dataset = AsePairDBDataset({"src": config["data_path"]})
     if distributed:
         sampler = DistributedSampler(dataset, shuffle=True)
         loader_kwargs = {"sampler": sampler}
@@ -42,7 +42,7 @@ def main(config):
         dataset,
         batch_size=config["batch_size"],
         collate_fn=pair_atomicdata_list_to_batch,
-        num_workers=config.get("num_workers", 8),
+        num_workers=config["num_workers"],
         pin_memory=(device.type == "cuda"),
         **loader_kwargs
     )
@@ -58,7 +58,7 @@ def main(config):
     optimizer = torch.optim.AdamW(flow_map.parameters(), config["lr"])
 
     # Trainer
-    trainer = LSDTrainer(dataloader)
+    trainer = LSDTrainer(dataloader, sampler)
 
     # start training
     flow_map = trainer.train(

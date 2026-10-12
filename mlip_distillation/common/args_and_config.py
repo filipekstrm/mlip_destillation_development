@@ -13,7 +13,7 @@ def get_parser():
     :return: config - dictionary with all parameters to be used
     """
     parser = argparse.ArgumentParser(
-        description="Generation of Wyckoff positions",
+        description="Distillation of MLIPs into flow maps",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # If config file should be used
@@ -33,6 +33,21 @@ def get_parser():
         "--disable_cuda",
         action="store_true",
         help="Whether to disable cuda, even if available",
+    )
+
+    # Data
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="data/omat_init_and_final_relaxed",
+        help="Path to ASE DB with (initial, relaxed) structure pairs",
+    )
+
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=8,
+        help="Number of dataloader worker processes",
     )
 
     # Model
@@ -55,7 +70,7 @@ def get_parser():
         "--batch_size",
         type=int,
         default=256,
-        help="Seed for random number generator",
+        help="Batch size",
     )
 
     parser.add_argument(
@@ -140,12 +155,20 @@ def get_config():
                             #
                             prev_run_name = split_value[idx + 1]
                             string_value = prev_run_name.split("_")[0]
+                elif key == "data_path":
+                    # Reduce path to the dataset name only, so no "/" in run name.
+                    string_value = os.path.basename(os.path.normpath(value))
                 else:
                     string_value = value
                 flags_from_command_line.append(
                     f"{key}={string_value}" if key != "config" else str(string_value)
                 )
             config[key] = value
+
+    data_path_parts = os.path.normpath(config["data_path"]).split(os.path.sep)
+    assert (
+        len(data_path_parts) == 2 and data_path_parts[0] == "data"
+    ), f"data_path must have the structure data/[dataset name], got {config['data_path']}"
 
     config["cuda"] = not config["disable_cuda"] and torch.cuda.is_available()
     if "SLURM_JOB_ID" in os.environ:
