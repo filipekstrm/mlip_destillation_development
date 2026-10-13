@@ -22,7 +22,7 @@ class LSDTrainer(FlowMapTrainer):
                 self.sampler.set_epoch(epoch)
             for x0, x1 in self.train_loader:
                 x0 = x0.to(device)
-                x1 = x1.to(device)
+                x1 = self.derotate(x0, x1.to(device))
                 optimizer.zero_grad()
 
                 M_d = math.floor(eta * len(x1))

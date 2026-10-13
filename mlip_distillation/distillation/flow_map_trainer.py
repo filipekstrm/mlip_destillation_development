@@ -4,7 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mlip_distillation.common.lattice_decomposition import compute_Lt, compute_Lt_dot
+from mlip_distillation.common.lattice_decomposition import (
+    compute_Lt,
+    compute_Lt_dot,
+    fit_transform,
+)
 
 
 class FlowMapTrainer(ABC):
@@ -13,12 +17,26 @@ class FlowMapTrainer(ABC):
         self.sampler = sampler
 
     @torch.no_grad()
+    def derotate(self, x0, x1):
+        """
+        Rigidly rotate x1 (cell and positions) by R^T, where L0^-1 L1 = R @ S
+        is the polar decomposition. Afterwards L0^-1 L1 is symmetric, i.e. the
+        cells differ by a pure stretch. The energy is rotation invariant, so this
+        only fixes the orientation of the relaxed structure.
+        """
+        R = fit_transform(x0.cell, x1.cell)["R"]
+        x1 = x1.clone()
+        x1.cell = x1.cell @ R.transpose(-1, -2)
+        x1.pos = torch.einsum("nj,nkj->nk", x1.pos, R[x1.batch])
+        return x1
+
+    @torch.no_grad()
     def build_stochastic_interpolant(self, x0, x1, t):
         It = x0.clone()
         t_pos = t.repeat_interleave(x0.natoms, dim=0).view(-1, 1)
         t_cell = t.view(-1)
         It.pos = (1 - t_pos) * x0.pos + t_pos * x1.pos
-        It.cell, cell_aux = compute_Lt(x0.cell, x1.cell, t_cell)
+        It.cell, cell_aux = compute_Lt(x0.cell, x1.cell, t_cell, remove_rotation=True)
         return It, cell_aux
 
     @torch.no_grad()

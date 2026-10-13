@@ -135,10 +135,15 @@ def _as_time_tensor(t, like: torch.Tensor) -> torch.Tensor:
 # ---------------------------------------------------------------------
 
 
-def fit_transform(L0: torch.Tensor, L1: torch.Tensor):
+def fit_transform(L0: torch.Tensor, L1: torch.Tensor, remove_rotation: bool = False):
     """
     Solve L1 = L0 @ X for X, decompose into rotation + scale.
-    Returns a dict of the pieces needed to evaluate L(t) later.
+    Returns a dict of the pieces needed to evaluate L(t) later, including
+    the rotation R of the polar decomposition X = R @ S.
+
+    If remove_rotation is True, the path is a pure stretch: L(t) = L0 @ S'(t)
+    with S' = R @ S @ R^T, so L(1) = L1 @ R^T, i.e. L1 rigidly rotated by R^T.
+    For L1 that is already aligned (L0^-1 L1 symmetric), R = I and L(1) = L1.
 
     Raises ValueError if det(L0) and det(L1) have opposite signs for
     any batch element (the box would be mirrored -- unsupported).
@@ -152,9 +157,15 @@ def fit_transform(L0: torch.Tensor, L1: torch.Tensor):
 
     X = safe_solve(L0, L1)  # X s.t. L0 @ X = L1
     R, s, V = polar_decompose(X)  # X = R @ S,  S = V diag(s) V^T
-    axis, theta = rotation_to_axis_angle(R)
+    if remove_rotation:
+        # S' = R S R^T has eigenvectors R @ V and the same eigenvalues s
+        V = R @ V
+        axis = torch.zeros_like(s)
+        theta = torch.zeros_like(s[..., 0])
+    else:
+        axis, theta = rotation_to_axis_angle(R)
 
-    return {"axis": axis, "theta": theta, "s": s, "V": V}
+    return {"axis": axis, "theta": theta, "s": s, "V": V, "R": R}
 
 
 def compute_generators(params: dict):
@@ -194,7 +205,7 @@ def compute_Lt_from_params(L0: torch.Tensor, params: dict, t):
     return L_t, aux
 
 
-def compute_Lt(L0: torch.Tensor, L1: torch.Tensor, t):
+def compute_Lt(L0: torch.Tensor, L1: torch.Tensor, t, remove_rotation: bool = False):
     """
     Evaluate L(t) directly from the two boxes L0, L1 (runs fit_transform
     internally, then compute_Lt_from_params).
@@ -204,7 +215,7 @@ def compute_Lt(L0: torch.Tensor, L1: torch.Tensor, t):
     you need L(t) at many different t (e.g. a trajectory), it's cheaper
     to call fit_transform(L0, L1) once yourself and reuse compute_Lt_from_params.
     """
-    params = fit_transform(L0, L1)
+    params = fit_transform(L0, L1, remove_rotation=remove_rotation)
     return compute_Lt_from_params(L0, params, t)
 
 
@@ -273,6 +284,16 @@ if __name__ == "__main__":
         "\nmax |Ldot_analytic - Ldot_finite_diff| (float64):",
         (Ldot_analytic - Ldot_fd).abs().max().item(),
     )
+
+    # --- pure-stretch path: ends at L1 rigidly rotated by R^T ---
+    params_nr = fit_transform(L0d, L1d, remove_rotation=True)
+    L1_aligned = L1d @ params_nr["R"].transpose(-1, -2)
+    L_end_nr, aux_nr = compute_Lt_from_params(L0d, params_nr, 1.0)
+    L_t_nr, aux_nr = compute_Lt_from_params(L0d, params_nr, t0)
+    M = torch.linalg.solve(L_t_nr, compute_Lt_dot(L0d, aux_nr))
+    print("\n--- remove_rotation=True ---")
+    print("max |L(1) - L1 R^T| :", (L_end_nr - L1_aligned).abs().max().item())
+    print("max |L^-1 Ldot - (L^-1 Ldot)^T| :", (M - M.mT).abs().max().item())
 
     # --- mirroring is rejected, not silently handled ---
     print("\n--- mirrored box (should raise) ---")
