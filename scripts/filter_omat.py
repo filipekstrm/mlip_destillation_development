@@ -3,48 +3,63 @@ Filter an ASE DB down to (initial, relaxed) pairs: for each base sid, keep the
 single "_0" entry as initial, and the "_N" entry with the highest N as relaxed.
 Writes the resulting pairs to a new DB.
 
-Avoids reading full Atoms objects (positions/cell/calculator) until the
-second pass, when we already know which indices survived filtering.
+The sid lives in each row's data, so pass 1 has to decode every row. It does
+so in parallel, one shard per task, and skips building Atoms objects. Full
+Atoms objects are only materialized in pass 2, for the indices that survived.
 """
-import bisect
-import logging
+import multiprocessing as mp
 import os
 import shutil
+from collections import Counter
 from itertools import groupby
 
 import ase.db
 from fairchem.core.datasets import AseDBDataset
+
+NUM_WORKERS = os.cpu_count()
 
 
 def get_prefix(sid: str) -> str:
     return sid.rsplit("_", 1)[0]
 
 
-def get_sid_cheap(dataset: AseDBDataset, idx: int) -> str | None:
-    """Fetch just the sid for a flat index without materializing a full Atoms object."""
-    db_idx = bisect.bisect(dataset._idlen_cumulative, idx)
-    el_idx = idx if db_idx == 0 else idx - dataset._idlen_cumulative[db_idx - 1]
-    row = dataset.dbs[db_idx]._get_row(dataset.db_ids[db_idx][el_idx])
-    data = row.data if isinstance(row.data, dict) else {}
-    return data.get("sid", None)
+def get_shard_sids(args: tuple[str, list[int]]) -> list[str | None]:
+    """Read the sid of every row id in one shard, in the order given."""
+    path, ids = args
+    db = AseDBDataset.connect_db(path)
+    sids = []
+    for db_id in ids:
+        row = db._get_row(db_id)
+        data = row.data if isinstance(row.data, dict) else {}
+        sids.append(data.get("sid", None))
+    db.close()
+    return sids
 
 
 def filter_pairs_to_new_db(src_config: dict, dst_path: str) -> None:
     dataset = AseDBDataset(config=src_config)
 
-    # Pass 1 (cheap): sid only, no atoms conversion.
+    # Pass 1 (parallel over shards): sid only, no atoms conversion.
+    tasks = [(str(db.filename), ids) for db, ids in zip(dataset.dbs, dataset.db_ids)]
     sid_idx_pairs = []
-    for idx in range(len(dataset)):
-        sid = get_sid_cheap(dataset, idx)
-        if sid is None:
-            logging.warning(f"Entry {idx} has no sid, skipping.")
-            continue
-        sid_idx_pairs.append((sid, idx))
+    n_no_sid = 0
+    with mp.get_context("spawn").Pool(NUM_WORKERS) as pool:
+        offset = 0
+        for i, shard_sids in enumerate(pool.imap(get_shard_sids, tasks)):
+            for el_idx, sid in enumerate(shard_sids):
+                if sid is None:
+                    n_no_sid += 1
+                    continue
+                sid_idx_pairs.append((sid, offset + el_idx))
+            offset += len(shard_sids)
+            print(f"\rPass 1: read {i + 1}/{len(tasks)} shards", end="", flush=True)
+    print()
+    assert offset == len(dataset)
 
     sid_idx_pairs.sort(key=lambda pair: get_prefix(pair[0]))
 
     survivors = []  # flat indices to actually materialize + write
-    n_skipped_groups = 0
+    skip_reasons = Counter()
 
     for prefix, group_iter in groupby(
         sid_idx_pairs, key=lambda pair: get_prefix(pair[0])
@@ -53,32 +68,31 @@ def filter_pairs_to_new_db(src_config: dict, dst_path: str) -> None:
 
         initial_idx = None
         relaxed_candidates = []  # (n, idx)
-        valid = True
+        skip_reason = None
 
         for sid, idx in group:
             suffix = sid.rsplit("_", 1)[-1]
             try:
                 n = int(suffix)
             except ValueError:
-                valid = False
+                skip_reason = "non-integer sid suffix"
                 break
 
             if n == 0:
                 if initial_idx is not None:
-                    valid = (
-                        False  # duplicate _0 - real data problem, not just "pick one"
-                    )
+                    # Duplicate _0 - real data problem, not just "pick one"
+                    skip_reason = "duplicate _0"
                     break
                 initial_idx = idx
             else:
                 relaxed_candidates.append((n, idx))
 
-        if not valid or initial_idx is None or not relaxed_candidates:
-            n_skipped_groups += 1
-            logging.warning(
-                f"Skipping base sid {prefix!r}: needs exactly one _0 and at least one "
-                "relaxed entry (or found a duplicate _0)."
-            )
+        if skip_reason is None and initial_idx is None:
+            skip_reason = "no _0"
+        if skip_reason is None and not relaxed_candidates:
+            skip_reason = "no relaxed (_N, N > 0) entry"
+        if skip_reason is not None:
+            skip_reasons[skip_reason] += 1
             continue
 
         _, relaxed_idx = max(relaxed_candidates, key=lambda t: t[0])  # highest N wins
@@ -95,16 +109,20 @@ def filter_pairs_to_new_db(src_config: dict, dst_path: str) -> None:
     new_db.close()
 
     print(
+        f"Read {len(dataset)} entries ({n_no_sid} without sid, ignored). "
         f"Wrote {len(survivors)} entries ({len(survivors) // 2} pairs); "
-        f"skipped {n_skipped_groups} invalid groups."
+        f"skipped {sum(skip_reasons.values())} invalid groups."
     )
+    for reason, count in skip_reasons.most_common():
+        print(f"  {reason}: {count}")
 
 
 if __name__ == "__main__":
     dataset_path = os.path.join("data", "omat_rattled_relax")
     config_kwargs = {}
     config = dict(src=dataset_path, **config_kwargs)
-    destination_folder = os.path.join("data", "omat_init_and_final_relaxed")
+    # Lives on the large disk; data/omat_init_and_final_relaxed is a symlink to it.
+    destination_folder = "/mnt/data0/filipeks/omat_init_and_final_relaxed"
     if os.path.isdir(destination_folder):
         shutil.rmtree(destination_folder)
     os.mkdir(destination_folder)
