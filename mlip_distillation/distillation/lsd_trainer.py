@@ -56,9 +56,13 @@ class LSDTrainer(FlowMapTrainer):
                     Xst, dXst_dt_pos, dXst_dt_cell = flow_map.partial_t(Is_j, s_j, t_j)
 
                     # Stop-gradient on the target. Equivalent to calling .detach() on
-                    # the results, but no graph is recorded, which saves memory
+                    # the results, but no graph is recorded, which saves memory.
+                    # Eval mode makes the target the full network, without dropout,
+                    # instead of a pass with different random masks than partial_t.
                     with torch.no_grad():
+                        flow_map.eval()
                         bt_j_pos, bt_j_cell = flow_map.v(Xst, t_j, t_j)
+                        flow_map.train()
                     r_j_pos = dXst_dt_pos - bt_j_pos
                     r_j_cell = dXst_dt_cell - bt_j_cell
                     w_st = flow_map.compute_weight(s_j, t_j)

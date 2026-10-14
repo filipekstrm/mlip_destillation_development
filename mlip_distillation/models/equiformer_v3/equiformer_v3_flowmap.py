@@ -165,24 +165,6 @@ class EquiformerV3FlowMap(torch.nn.Module, GraphModelMixin):
     ):
         super().__init__()
 
-        # Stochastic regularization must be off: LSD compares partial_t of the flow
-        # map with the velocity v(X_st, t, t), which are separate forward passes, so
-        # random masks would make the residual noisy even in train mode.
-        stochastic_rates = {
-            "alpha_drop": alpha_drop,
-            "attn_mask_rate": attn_mask_rate,
-            "attn_weights_drop": attn_weights_drop,
-            "value_drop": value_drop,
-            "drop_path_rate": drop_path_rate,
-            "proj_drop": proj_drop,
-            "ffn_drop": ffn_drop,
-        }
-        nonzero = {k: v for k, v in stochastic_rates.items() if v != 0.0}
-        if nonzero:
-            raise ValueError(
-                f"Stochastic regularization must be disabled, got {nonzero}"
-            )
-
         self.use_pbc = use_pbc
         self.use_pbc_single = use_pbc_single
         self.otf_graph = otf_graph

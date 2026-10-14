@@ -58,6 +58,20 @@ def get_parser():
         help="Dimension for learnable weights model, None means no learnable weights",
     )
 
+    parser.add_argument(
+        "--drop_path_rate",
+        type=float,
+        default=0.0,
+        help="Drop path rate in EquiformerV3",
+    )
+
+    parser.add_argument(
+        "--attn_weights_drop",
+        type=float,
+        default=0.0,
+        help="Dropout rate for attention weights in EquiformerV3",
+    )
+
     # Training
     parser.add_argument(
         "--num_epochs",

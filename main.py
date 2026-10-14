@@ -1,12 +1,12 @@
 import numpy as np
 import torch
-from mlip_distillation.distributed_utils import DDPWrapper as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
 from mlip_distillation.common.args_and_config import get_config
 from mlip_distillation.dataset.data_utils import pair_atomicdata_list_to_batch
 from mlip_distillation.dataset.pair_dataset import AsePairDBDataset
 from mlip_distillation.distillation.lsd_trainer import LSDTrainer
+from mlip_distillation.distributed_utils import DDPWrapper as DDP
 from mlip_distillation.distributed_utils import cleanup_ddp, setup_ddp
 from mlip_distillation.models.equiformer_v3.equiformer_v3_flowmap import (
     EquiformerV3FlowMap,
@@ -48,7 +48,10 @@ def main(config):
     )
 
     # Models
-    v_model = EquiformerV3FlowMap()
+    v_model = EquiformerV3FlowMap(
+        drop_path_rate=config["drop_path_rate"],
+        attn_weights_drop=config["attn_weights_drop"],
+    )
     flow_map = FlowMap(v_model, config["learnable_weights_dim"]).to(config["device"])
 
     if distributed:
