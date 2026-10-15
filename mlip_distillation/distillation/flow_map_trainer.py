@@ -10,12 +10,29 @@ from mlip_distillation.common.lattice_decomposition import (
     fit_transform,
 )
 from mlip_distillation.common.periodic import cart_to_frac, frac_to_cart, wrap
+from mlip_distillation.distributed_utils import is_main_process
 
 
 class FlowMapTrainer(ABC):
-    def __init__(self, dataloader, sampler=None):
+    def __init__(self, dataloader, logger, sampler=None):
         self.train_loader = dataloader
+        self.logger = logger
         self.sampler = sampler
+
+    def save_checkpoint(self, model, optimizer, epoch):
+        # Only the main process saves. Unwrap DDP if present.
+        if not is_main_process():
+            return
+        model = model.module if hasattr(model, "module") else model
+        self.logger.save_checkpoint(
+            {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "epoch": epoch,
+            },
+            best=False,
+            epoch=epoch,
+        )
 
     @torch.no_grad()
     def derotate(self, x0, x1):

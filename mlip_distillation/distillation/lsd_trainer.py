@@ -1,23 +1,21 @@
 import math
-import os
 
-import numpy as np
 import torch
 from fairchem.core.datasets.atomic_data import atomicdata_list_to_batch
 from torch.amp import autocast
 
 from mlip_distillation.distillation.flow_map_trainer import FlowMapTrainer
-from mlip_distillation.distributed_utils import is_main_process
+from mlip_distillation.distributed_utils import global_mean, is_main_process
 
 
 class LSDTrainer(FlowMapTrainer):
-    def train(self, flow_map, eta, optimizer, num_epochs, device):
-        losses = []
-        losses_b = []
-        losses_lsd = []
+    def train(self, flow_map, eta, optimizer, num_epochs, device, start_epoch=0):
         if is_main_process():
             print("Starting training flow map with LSD")
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, num_epochs):
+            losses = []
+            losses_b = []
+            losses_lsd = []
             if self.sampler is not None:
                 self.sampler.set_epoch(epoch)
             for x0, x1 in self.train_loader:
@@ -77,22 +75,18 @@ class LSDTrainer(FlowMapTrainer):
                 losses_lsd.append(L_LSD.item())
                 losses_b.append(L_b.item())
                 losses.append(L_SD.item())
+            # Epoch means over all ranks (all ranks must take part in the reduce)
+            epoch_log = {
+                "loss": global_mean(losses, device),
+                "L_B": global_mean(losses_b, device),
+                "L_LSD": global_mean(losses_lsd, device),
+            }
             if is_main_process():
                 print(
                     f"Epoch {epoch + 1} loss:\n",
-                    f"L_B loss: {np.mean(losses_b)}\n",
-                    f"L_LSD loss: {np.mean(losses_lsd)}",
+                    f"L_B loss: {epoch_log['L_B']}\n",
+                    f"L_LSD loss: {epoch_log['L_LSD']}",
                 )
-                self.save_checkpoint(flow_map, epoch)
+                self.logger.log(epoch_log, step=epoch)
+            self.save_checkpoint(flow_map, optimizer, epoch)
         return flow_map
-
-    def save_checkpoint(self, model, epoch):
-        # unwrap DDP if present, otherwise save as-is
-        state_dict = (
-            model.module.state_dict()
-            if hasattr(model, "module")
-            else model.state_dict()
-        )
-        torch.save(
-            state_dict, os.path.join("checkpoints", f"checkpoint_epoch={epoch}.pt")
-        )

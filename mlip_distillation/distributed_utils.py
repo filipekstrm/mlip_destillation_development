@@ -2,7 +2,6 @@ import os
 
 import torch
 import torch.distributed as dist
-
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
@@ -43,6 +42,18 @@ def cleanup_ddp():
 
 def is_main_process() -> bool:
     return not dist.is_initialized() or dist.get_rank() == 0
+
+
+def global_mean(values, device):
+    """
+    Mean of the per-rank lists of floats `values` over all ranks. Must be called
+    on every rank. Sums and counts are reduced, so ranks may have different
+    numbers of values.
+    """
+    stats = torch.tensor([sum(values), len(values)], device=device, dtype=torch.float64)
+    if dist.is_initialized():
+        dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+    return (stats[0] / stats[1]).item()
 
 
 class DDPWrapper(DDP):

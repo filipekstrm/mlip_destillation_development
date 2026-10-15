@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import DataLoader, DistributedSampler
 
 from mlip_distillation.common.args_and_config import get_config
+from mlip_distillation.common.loggers import get_logger
 from mlip_distillation.dataset.data_utils import pair_atomicdata_list_to_batch
 from mlip_distillation.dataset.pair_dataset import AsePairDBDataset
 from mlip_distillation.distillation.lsd_trainer import LSDTrainer
@@ -27,6 +28,9 @@ def main(config):
         # For reproducibility
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+    # Created before config["device"] is set, so the config stays serializable
+    logger = get_logger(config)
 
     config["device"] = device
     # Dataloader
@@ -54,14 +58,23 @@ def main(config):
     )
     flow_map = FlowMap(v_model, config["learnable_weights_dim"]).to(config["device"])
 
+    checkpoint = None
+    start_epoch = 0
+    if config["load"]:
+        checkpoint = torch.load(config["load"], map_location=device)
+        flow_map.load_state_dict(checkpoint["model"])
+        start_epoch = checkpoint["epoch"] + 1
+
     if distributed:
         device_ids = [device.index] if device.type == "cuda" else None
         flow_map = DDP(flow_map, device_ids=device_ids)
 
     optimizer = torch.optim.AdamW(flow_map.parameters(), config["lr"])
+    if checkpoint is not None:
+        optimizer.load_state_dict(checkpoint["optimizer"])
 
     # Trainer
-    trainer = LSDTrainer(dataloader, sampler)
+    trainer = LSDTrainer(dataloader, logger, sampler)
 
     # start training
     flow_map = trainer.train(
@@ -70,6 +83,7 @@ def main(config):
         optimizer,
         config["num_epochs"],
         config["device"],
+        start_epoch,
     )
 
     cleanup_ddp()

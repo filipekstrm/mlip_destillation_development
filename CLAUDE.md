@@ -25,13 +25,15 @@ The project is a deep learning project and hence uses PyTorch. The mamba environ
 - `distillation/lsd_trainer.py`: Lagrangian self-distillation. A fraction `eta` (`--distillation_eta`) of each batch is used for the diagonal loss (s = t, velocity matches `dI_t/dt`). The rest is used for the LSD loss (`dX_st/dt` matches `v(X_st, t, t)`). The target is computed under `no_grad` (the stop-gradient) and in eval mode, so with dropout (`--drop_path_rate`, `--attn_weights_drop`, both default 0) it is the full network.
 - `common/periodic.py`: `wrap` (shortest displacement on the unit torus) and `cart_to_frac` / `frac_to_cart`, which run in fp32 with autocast disabled.
 - `common/lattice_decomposition.py`: cell interpolation. Writes `L1 = L0 @ X` with `X = R @ S` (polar decomposition) and interpolates `R` and `S` along geodesics. `compute_Lt` / `compute_Lt_dot` share an `aux` dict. Cell rows are lattice vectors, and `det(L0)` and `det(L1)` must have the same sign.
+- `common/loggers.py`: loggers registered by name with `@register_logger` (`none`/`noop`, `model_only`, `local_only`, `wandb`), chosen by `--logger`. `get_logger(config)` returns the chosen logger on the main process and a `NoOpLogger` on other ranks. Except for the no-op logger, they create `checkpoints/<run_name>/`, and all but `model_only` also create `logs/<run_name>/`. `common/constants.py` holds the wandb project and checkpoint file names.
 - `distributed_utils.py`: DDP setup and cleanup, `is_main_process`, and `DDPWrapper`, which forwards unknown attributes (e.g. `.v`, `.partial_t`) to the wrapped module.
 
 ## Conventions and gotchas
 - The forward/loss pass runs under bf16 autocast. Linear algebra (eigh, solve, det, inverse) must go through the `safe_*` helpers in `lattice_decomposition.py`, which upcast to fp32.
 - In `FlowMap.v`, the model's raw cell output (a stress-like tensor from the stress head) is symmetrized and mapped to `dcell = cell @ sigma`, i.e. a pure strain with no rotation (row convention). This matches the interpolant's cell velocity exactly because `derotate` makes `L0^-1 L1` symmetric. This is the current choice, not a settled one: it is open for discussion, so don't change it silently.
 - Under DDP, print and save only when `is_main_process()` is true. Unwrap `.module` before calling `state_dict()`.
-- Checkpoints are written to `checkpoints/checkpoint_epoch={epoch}.pt`. The `checkpoints/` directory must already exist.
+- Trainers get the logger as `self.logger`. Log and checkpoint through it, not with `torch.save` or ad hoc files. `FlowMapTrainer.save_checkpoint` saves `{"model", "optimizer", "epoch"}` on the main process to `checkpoints/<run_name>/parameters_{epoch}.pt`.
+- `--load <checkpoint>` resumes training: it loads model and optimizer state, continues from `epoch + 1`, and starts a new run directory, copying the old logs into it. The path must lie inside `checkpoints/<run_name>/`. `run_name` is a timestamp followed by the CLI flags (except `--logger`).
 
 ## Evaluation, status and roadmap
 - Current focus is self-distillation: there is no pre-trained teacher. EquiformerV3 is the backbone of the velocity model and is trained from scratch on (initial, relaxed) pairs with the LSD objective.

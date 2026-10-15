@@ -35,6 +35,20 @@ def get_parser():
         help="Whether to disable cuda, even if available",
     )
 
+    parser.add_argument(
+        "--logger",
+        type=str,
+        default="local_only",
+        help="Logger to use: none/noop, model_only, local_only or wandb",
+    )
+
+    parser.add_argument(
+        "--load",
+        type=str,
+        default=None,
+        help="Checkpoint to resume from, must be inside checkpoints/<run_name>/",
+    )
+
     # Data
     parser.add_argument(
         "--data_path",
