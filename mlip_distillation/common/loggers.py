@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import sys
@@ -167,10 +168,12 @@ class LocalOnlyLogger(ModelOnlyLogger):
         pass
 
     def log(self, data_to_log, step):
+        # One JSON object per line. float() fails loudly on non-scalar values and
+        # turns numpy scalars and one-element tensors into plain floats.
         full_dict = {"Step": step}
-        full_dict.update(data_to_log)
+        full_dict.update({key: float(value) for key, value in data_to_log.items()})
         with open(self.log_file, "a") as log_file:
-            log_file.write(f"{full_dict}\n")
+            log_file.write(json.dumps(full_dict) + "\n")
 
 
 @register_logger("wandb")
