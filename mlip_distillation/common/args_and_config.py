@@ -38,8 +38,9 @@ def get_parser():
     parser.add_argument(
         "--logger",
         type=str,
-        default="local_only",
-        help="Logger to use: none/noop, model_only, local_only or wandb",
+        default=None,
+        help="Logger to use: none/noop, model_only, local_only or wandb. Required "
+        "(no default), so a run is never unintentionally left unlogged",
     )
 
     parser.add_argument(
@@ -205,6 +206,10 @@ def get_config():
         config["job_id"] = None
     dt_string = datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
     config["run_name"] = "_".join([dt_string] + flags_from_command_line)
+    assert config["logger"] is not None, (
+        "No logger given: set --logger (none/noop, model_only, local_only or wandb) "
+        "on the command line or in the config file"
+    )
     # if not config["mode"].startswith("train") or config["debug"]:
     #     config["logger"] = "none"
     #     print(

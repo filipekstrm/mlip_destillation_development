@@ -74,12 +74,11 @@ def main(config):
         optimizer.load_state_dict(checkpoint["optimizer"])
 
     # Trainer
-    trainer = LSDTrainer(dataloader, logger, sampler)
+    trainer = LSDTrainer(dataloader, logger, config["distillation_eta"], sampler)
 
     # start training
     flow_map = trainer.train(
         flow_map,
-        config["distillation_eta"],
         optimizer,
         config["num_epochs"],
         config["device"],
