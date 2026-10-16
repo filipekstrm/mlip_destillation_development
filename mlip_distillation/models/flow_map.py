@@ -3,24 +3,17 @@ import torch.nn as nn
 
 from mlip_distillation.common.periodic import cart_to_frac, frac_to_cart
 from mlip_distillation.models import utils
+from mlip_distillation.models.velocity_field import VelocityField
 
 
 class FlowMap(nn.Module):
     def __init__(self, model, learnable_weights_dim=None):
         super().__init__()
-        self.v_model = model
+        self.v = VelocityField(model)
         if learnable_weights_dim is not None:
             self.weights_model = utils.WeightsMLP(learnable_weights_dim)
         else:
             self.weights_model = None
-
-    def v(self, data, s, t):
-        dpos, strain_rate = self.v_model(data, s, t)
-        # Cell moves by a pure (symmetric) strain, no rotation: dL = L @ sigma
-        # (row convention, rows of cell are lattice vectors)
-        strain_rate = 0.5 * (strain_rate + strain_rate.transpose(-1, -2))
-        dlattice = torch.matmul(data.cell, strain_rate)
-        return dpos, dlattice
 
     def compute_weight(self, s, t):
         if self.weights_model is not None:
