@@ -50,6 +50,13 @@ def get_parser():
         help="Checkpoint to resume from, must be inside checkpoints/<run_name>/",
     )
 
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="train_lsd",
+        help="What to run, maps to a registered TrainerRunner: train_lsd or train_fm",
+    )
+
     # Data
     parser.add_argument(
         "--data_path",
