@@ -39,7 +39,7 @@ _NORM_SCALE_DEGREE = math.sqrt(_AVG_DEGREE)  # 4.836862503353054
 
 
 @registry.register_model("equiformer_v3")
-class EquiformerV3FlowMap(torch.nn.Module, GraphModelMixin):
+class EquiformerV3Flow(torch.nn.Module, GraphModelMixin):
     """
     Args:
         use_pbc (bool):         Use periodic boundary conditions
@@ -462,7 +462,11 @@ class EquiformerV3FlowMap(torch.nn.Module, GraphModelMixin):
         x_scalar = x_scalar.view(x_scalar.shape[0], self.num_channels)
         return x_scalar, x
 
-    def forward(self, data, s, t):
+    def forward(self, data, s, t=None):
+        # Without t, this is a plain flow (velocity) model: t = s, the diagonal
+        # of the flow map, so checkpoints are interchangeable between the two.
+        if t is None:
+            t = s
         self.batch_size = len(data.natoms)
         self.dtype = data.pos.dtype
         self.device = data.pos.device

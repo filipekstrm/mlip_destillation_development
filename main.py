@@ -9,9 +9,7 @@ from mlip_distillation.dataset.pair_dataset import AsePairDBDataset
 from mlip_distillation.distillation.lsd_trainer import LSDTrainer
 from mlip_distillation.distributed_utils import DDPWrapper as DDP
 from mlip_distillation.distributed_utils import cleanup_ddp, setup_ddp
-from mlip_distillation.models.equiformer_v3.equiformer_v3_flowmap import (
-    EquiformerV3FlowMap,
-)
+from mlip_distillation.models.equiformer_v3.equiformer_v3_flow import EquiformerV3Flow
 from mlip_distillation.models.flow_map import FlowMap
 
 
@@ -52,7 +50,7 @@ def main(config):
     )
 
     # Models
-    v_model = EquiformerV3FlowMap(
+    v_model = EquiformerV3Flow(
         drop_path_rate=config["drop_path_rate"],
         attn_weights_drop=config["attn_weights_drop"],
     )
